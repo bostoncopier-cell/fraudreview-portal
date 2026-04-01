@@ -9,7 +9,7 @@ export default function Home() {
     fileInputRef.current?.click();
   };
 
- const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
@@ -24,12 +24,12 @@ export default function Home() {
       body: formData,
     });
 
-    const text = await response.text();
-    alert(text);
+    const data = await response.json();  // ✅ IMPORTANT semicolon here
+    alert(JSON.stringify(data, null, 2));
 
   } catch (error) {
     console.error(error);
-    alert(`Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+    alert("Upload failed");
   }
 };
 
