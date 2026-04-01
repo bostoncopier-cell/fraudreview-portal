@@ -9,20 +9,29 @@ export default function Home() {
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+ const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("transaction_type", "portal_upload");
+  formData.append("contact_email", "bostoncopier@gmail.com");
 
   try {
     const response = await fetch("https://fraud-review-api.onrender.com/api/submit", {
-  method: "POST",
-  body: formData,
-});
+      method: "POST",
+      body: formData,
+    });
 
-    const data = await response.json();
+    const text = await response.text();
+    alert(text);
+
+  } catch (error) {
+    console.error(error);
+    alert(`Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+  }
+};
 
 alert(JSON.stringify(data, null, 2));
   } catch (error) {
