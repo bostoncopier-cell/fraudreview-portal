@@ -9,12 +9,27 @@ export default function Home() {
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      alert(`File selected: ${file.name}`);
-    }
-  };
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const response = await fetch("https://fraud-review-api.onrender.com/submit", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    alert(`Status: ${data.status}`);
+  } catch (error) {
+    console.error(error);
+    alert("Upload failed");
+  }
+};
 
   return (
     <main style={{
