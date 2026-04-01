@@ -1,9 +1,11 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [result, setResult] = useState<string>("");
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -21,6 +23,9 @@ export default function Home() {
     formData.append("contact_email", "bostoncopier@gmail.com");
 
     try {
+      setIsUploading(true);
+      setResult("");
+
       const response = await fetch(
         "https://fraud-review-api.onrender.com/api/submit",
         {
@@ -30,14 +35,25 @@ export default function Home() {
       );
 
       const data = await response.json();
-      alert(JSON.stringify(data, null, 2));
+
+      if (data.ok) {
+        setResult(
+          `Submission received successfully.\n\nSubmission ID: ${data.submission_id}\nFile: ${
+            data.files_received?.[0] || "N/A"
+          }\n\nMessage: ${data.message}`
+        );
+      } else {
+        setResult(`Submission failed.\n\n${JSON.stringify(data, null, 2)}`);
+      }
     } catch (error) {
       console.error(error);
-      alert(
+      setResult(
         `Upload failed: ${
           error instanceof Error ? error.message : "Unknown error"
         }`
       );
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -51,11 +67,13 @@ export default function Home() {
         backgroundColor: "#0f172a",
         color: "white",
         fontFamily: "Arial",
+        padding: "20px",
       }}
     >
       <div
         style={{
-          width: "400px",
+          width: "100%",
+          maxWidth: "460px",
           padding: "30px",
           borderRadius: "12px",
           backgroundColor: "#1e293b",
@@ -64,7 +82,7 @@ export default function Home() {
         }}
       >
         <h1 style={{ fontSize: "24px", marginBottom: "10px" }}>
-          Fraud Review Portal v3
+          Fraud Review Portal v4
         </h1>
 
         <p style={{ marginBottom: "20px", color: "#cbd5f5" }}>
@@ -85,18 +103,20 @@ export default function Home() {
 
         <button
           onClick={handleUploadClick}
+          disabled={isUploading}
           style={{
             width: "100%",
             padding: "12px",
             borderRadius: "8px",
             border: "none",
-            backgroundColor: "#22c55e",
+            backgroundColor: isUploading ? "#64748b" : "#22c55e",
             color: "white",
             fontSize: "16px",
-            cursor: "pointer",
+            cursor: isUploading ? "not-allowed" : "pointer",
+            marginBottom: result ? "20px" : "0",
           }}
         >
-          Upload Email or File
+          {isUploading ? "Uploading..." : "Upload Email or File"}
         </button>
 
         <input
@@ -105,6 +125,24 @@ export default function Home() {
           onChange={handleFileChange}
           style={{ display: "none" }}
         />
+
+        {result && (
+          <div
+            style={{
+              marginTop: "20px",
+              textAlign: "left",
+              backgroundColor: "#0f172a",
+              borderRadius: "8px",
+              padding: "16px",
+              whiteSpace: "pre-wrap",
+              color: "#e2e8f0",
+              fontSize: "14px",
+              lineHeight: 1.5,
+            }}
+          >
+            {result}
+          </div>
+        )}
       </div>
     </main>
   );
