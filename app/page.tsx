@@ -17,10 +17,10 @@ export default function Home() {
   formData.append("file", file);
 
   try {
-    const response = await fetch("https://fraud-review-api.onrender.com/submit", {
-      method: "POST",
-      body: formData,
-    });
+    const response = await fetch("https://fraud-review-api.onrender.com/api/submit", {
+  method: "POST",
+  body: formData,
+});
 
     const data = await response.json();
 
