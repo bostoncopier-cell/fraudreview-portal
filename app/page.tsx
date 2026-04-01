@@ -50,8 +50,8 @@ export default function Home() {
         textAlign: "center"
       }}>
         <h1 style={{ fontSize: "24px", marginBottom: "10px" }}>
-          Fraud Review Portal
-        </h1>
+  Fraud Review Portal v2
+</h1>
 
         <p style={{ marginBottom: "20px", color: "#cbd5f5" }}>
           Welcome back. Your security dashboard.
