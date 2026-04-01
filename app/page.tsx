@@ -24,7 +24,7 @@ export default function Home() {
 
     const data = await response.json();
 
-    alert(`Status: ${data.status}`);
+alert(JSON.stringify(data, null, 2));
   } catch (error) {
     console.error(error);
     alert("Upload failed");
