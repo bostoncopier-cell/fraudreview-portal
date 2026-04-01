@@ -14,7 +14,7 @@ export default function Home() {
   if (!file) return;
 
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("files", file);
   formData.append("transaction_type", "portal_upload");
   formData.append("contact_email", "bostoncopier@gmail.com");
 
