@@ -1,148 +1,369 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { CheckCircle2, FileUp, Loader2, Mail, ShieldAlert, UploadCloud } from "lucide-react";
 
-export default function Home() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [result, setResult] = useState<string>("");
-  const [isUploading, setIsUploading] = useState(false);
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "https://fraud-review-api.onrender.com";
+const MAX_FILE_SIZE_MB = 20;
+const ACCEPTED_FILE_TYPES = ".eml,.msg,.pdf,.png,.jpg,.jpeg,.webp";
 
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
+type SubmissionState = "idle" | "submitting" | "success" | "error";
+type TransactionType = "invoice" | "wire" | "vendor-change" | "other";
+
+const transactionOptions: {
+  value: TransactionType;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "invoice",
+    label: "Invoice / payment request",
+    description: "A bill, invoice, or request to pay.",
+  },
+  {
+    value: "wire",
+    label: "Wire / ACH instructions",
+    description: "Banking details or transfer instructions changed or received.",
+  },
+  {
+    value: "vendor-change",
+    label: "Vendor change request",
+    description: "A supplier/customer says their payment or contact details changed.",
+  },
+  {
+    value: "other",
+    label: "Other suspicious communication",
+    description: "Anything else you want reviewed before acting.",
+  },
+];
+
+export default function Page() {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [transactionType, setTransactionType] = useState<TransactionType>("invoice");
+  const [email, setEmail] = useState("");
+  const [notes, setNotes] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [state, setState] = useState<SubmissionState>("idle");
+  const [message, setMessage] = useState("");
+  const [submissionId, setSubmissionId] = useState<string | null>(null);
+
+  const isValidEmail = useMemo(() => /\S+@\S+\.\S+/.test(email), [email]);
+
+  const isFileTooLarge = useMemo(() => {
+    if (!file) return false;
+    return file.size > MAX_FILE_SIZE_MB * 1024 * 1024;
+  }, [file]);
+
+  const isFormValid = !!file && !!email && isValidEmail && !isFileTooLarge;
+
+  const resetForm = () => {
+    setTransactionType("invoice");
+    setEmail("");
+    setNotes("");
+    setFile(null);
+    setState("idle");
+    setMessage("");
+    setSubmissionId(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0] || null;
+    setFile(selectedFile);
+    setState("idle");
+    setMessage("");
+  };
 
-    const formData = new FormData();
-    formData.append("files", file);
-    formData.append("transaction_type", "portal_upload");
-    formData.append("contact_email", "bostoncopier@gmail.com");
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!isFormValid || !file) {
+      setState("error");
+      setMessage("Please add a valid email and a supported file before submitting.");
+      return;
+    }
 
     try {
-      setIsUploading(true);
-      setResult("");
+      setState("submitting");
+      setMessage("");
+      setSubmissionId(null);
 
-      const response = await fetch(
-        "https://fraud-review-api.onrender.com/api/submit",
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
+      const formData = new FormData();
+      formData.append("transaction_type", transactionType);
+      formData.append("contact_email", email);
+      formData.append("notes", notes);
+      formData.append("files", file);
 
-      const data = await response.json();
+      const response = await fetch(`${API_BASE_URL}/api/submit`, {
+        method: "POST",
+        body: formData,
+      });
 
-      if (data.ok) {
-        setResult(
-          `Submission received successfully.\n\nSubmission ID: ${data.submission_id}\nFile: ${
-            data.files_received?.[0] || "N/A"
-          }\n\nMessage: ${data.message}`
-        );
-      } else {
-        setResult(`Submission failed.\n\n${JSON.stringify(data, null, 2)}`);
+      const rawText = await response.text();
+      let data: any = null;
+
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        data = { detail: rawText || "Unexpected response from server." };
       }
-    } catch (error) {
-      console.error(error);
-      setResult(
-        `Upload failed: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
+
+      if (!response.ok) {
+  const detail =
+    typeof data?.detail === "string"
+      ? data.detail
+      : data?.detail
+      ? JSON.stringify(data.detail)
+      : rawText || "Upload failed. Please try again.";
+
+  throw new Error(detail);
+}
+
+      setState("success");
+      setSubmissionId(data?.submission_id || null);
+      setMessage(
+        data?.message ||
+          "Your file was submitted successfully and flagged for specialist review before any guidance is provided."
       );
-    } finally {
-      setIsUploading(false);
+    } catch (error) {
+      const friendlyError =
+  error instanceof Error
+    ? error.message
+    : typeof error === "object"
+    ? JSON.stringify(error)
+    : "Something went wrong while submitting your file. Please try again.";
+      setState("error");
+      setMessage(friendlyError);
     }
   };
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: "#0f172a",
-        color: "white",
-        fontFamily: "Arial",
-        padding: "20px",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "460px",
-          padding: "30px",
-          borderRadius: "12px",
-          backgroundColor: "#1e293b",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
-          textAlign: "center",
-        }}
-      >
-        <h1 style={{ fontSize: "24px", marginBottom: "10px" }}>
-          Fraud Review Portal v4
-        </h1>
+    <main className="min-h-screen bg-slate-50 px-4 py-10 md:px-6">
+      <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="space-y-4 p-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
+                <ShieldAlert className="h-6 w-6" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+                  Before You Send Money — Get It Reviewed
+                </h1>
+                <p className="mt-1 text-base text-slate-600">
+                  Upload a suspicious payment-related email, screenshot, PDF, or message for review.
+                </p>
+              </div>
+            </div>
+          </div>
 
-        <p style={{ marginBottom: "20px", color: "#cbd5f5" }}>
-          Welcome back. Your security dashboard.
-        </p>
+          <div className="p-6 pt-0">
+            <form onSubmit={handleSubmit} className="space-y-8">
+              <section className="space-y-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    1. What kind of transaction is this?
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Choose the closest match so the review team has better context.
+                  </p>
+                </div>
 
-        <div
-          style={{
-            backgroundColor: "#0f172a",
-            padding: "15px",
-            borderRadius: "8px",
-            marginBottom: "20px",
-          }}
-        >
-          <p style={{ margin: 0 }}>Transactions Remaining</p>
-          <h2 style={{ margin: "10px 0", fontSize: "28px" }}>15</h2>
+                <div className="grid gap-3">
+                  {transactionOptions.map((option) => {
+                    const selected = transactionType === option.value;
+                    return (
+                      <label
+                        key={option.value}
+                        className={`cursor-pointer rounded-2xl border p-4 transition ${
+                          selected
+                            ? "border-slate-900 bg-white shadow-sm"
+                            : "border-slate-200 bg-white hover:border-slate-300"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="radio"
+                            name="transactionType"
+                            value={option.value}
+                            checked={selected}
+                            onChange={() => setTransactionType(option.value)}
+                            className="mt-1"
+                          />
+                          <div className="min-w-0">
+                            <div className="font-medium text-slate-900">{option.label}</div>
+                            <div className="text-sm text-slate-600">{option.description}</div>
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">2. Upload the file</h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Supported: EML, MSG, PDF, PNG, JPG, JPEG, WEBP. Max file size: {MAX_FILE_SIZE_MB} MB.
+                  </p>
+                </div>
+
+                <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-white px-6 py-10 text-center transition hover:border-slate-400">
+                  <UploadCloud className="mb-3 h-10 w-10 text-slate-500" />
+                  <span className="text-base font-medium text-slate-900">
+                    {file ? file.name : "Click to choose a file"}
+                  </span>
+                  <span className="mt-1 text-sm text-slate-600">
+                    {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "Or drag and drop from your device"}
+                  </span>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept={ACCEPTED_FILE_TYPES}
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </label>
+
+                {isFileTooLarge && (
+                  <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                    <div className="font-semibold text-red-800">File too large</div>
+                    <div className="text-sm text-red-700">
+                      Please choose a file smaller than {MAX_FILE_SIZE_MB} MB.
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              <section className="space-y-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    3. Where should we send the review status?
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    This is used for submission confirmation and specialist follow-up.
+                  </p>
+                </div>
+
+                <div className="grid gap-4">
+                  <div className="space-y-2">
+                    <label htmlFor="contactEmail" className="block text-sm font-medium text-slate-900">
+                      Contact email
+                    </label>
+                    <div className="relative">
+                      <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <input
+                        id="contactEmail"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="name@company.com"
+                        className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm outline-none transition focus:border-slate-400"
+                      />
+                    </div>
+                    {!!email && !isValidEmail && (
+                      <p className="text-sm text-red-600">Please enter a valid email address.</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label htmlFor="notes" className="block text-sm font-medium text-slate-900">
+                      Optional notes
+                    </label>
+                    <textarea
+                      id="notes"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Anything you want the reviewer to know?"
+                      className="min-h-[120px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400"
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="submit"
+                  disabled={!isFormValid || state === "submitting"}
+                  className="inline-flex min-w-[180px] items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {state === "submitting" ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <FileUp className="h-4 w-4" />
+                      Submit for Review
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-slate-900"
+                >
+                  Reset form
+                </button>
+              </div>
+
+              {state === "success" && (
+                <div className="rounded-2xl border border-green-200 bg-green-50 p-4">
+                  <div className="flex items-center gap-2 font-semibold text-green-800">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Submission received
+                  </div>
+                  <div className="mt-1 text-sm text-green-700">
+                    {message}
+                    {submissionId ? (
+                      <span className="mt-2 block font-medium">Reference ID: {submissionId}</span>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+
+              {state === "error" && message && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                  <div className="font-semibold text-red-800">Submission error</div>
+                  <div className="text-sm text-red-700">{message}</div>
+                </div>
+              )}
+            </form>
+          </div>
         </div>
 
-        <button
-          onClick={handleUploadClick}
-          disabled={isUploading}
-          style={{
-            width: "100%",
-            padding: "12px",
-            borderRadius: "8px",
-            border: "none",
-            backgroundColor: isUploading ? "#64748b" : "#22c55e",
-            color: "white",
-            fontSize: "16px",
-            cursor: isUploading ? "not-allowed" : "pointer",
-            marginBottom: result ? "20px" : "0",
-          }}
-        >
-          {isUploading ? "Uploading..." : "Upload Email or File"}
-        </button>
-
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          style={{ display: "none" }}
-        />
-
-        {result && (
-          <div
-            style={{
-              marginTop: "20px",
-              textAlign: "left",
-              backgroundColor: "#0f172a",
-              borderRadius: "8px",
-              padding: "16px",
-              whiteSpace: "pre-wrap",
-              color: "#e2e8f0",
-              fontSize: "14px",
-              lineHeight: 1.5,
-            }}
-          >
-            {result}
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-semibold text-slate-900">What happens next</h2>
+            <div className="mt-4 space-y-4 text-sm leading-6 text-slate-700">
+              <p>
+                Your upload is analyzed for risk indicators such as payment-instruction changes,
+                sender/domain mismatches, urgency language, and suspicious request patterns.
+              </p>
+              <p>
+                Results should remain gated behind specialist review before final guidance is sent to the end user.
+              </p>
+              <p>
+                This keeps the system conservative, helps reduce false confidence, and supports a human-in-the-loop review process.
+              </p>
+            </div>
           </div>
-        )}
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-semibold text-slate-900">Deployment checklist</h2>
+            <div className="mt-4 space-y-3 text-sm text-slate-700">
+              <div>• Set <code>NEXT_PUBLIC_API_BASE_URL</code> in Vercel.</div>
+              <div>• Confirm FastAPI CORS includes your production and www domains.</div>
+              <div>• Verify <code>POST /api/submit</code> accepts <code>transaction_type</code>, <code>contact_email</code>, <code>notes</code>, and <code>file</code>.</div>
+              <div>• Keep health check live at <code>/health</code>.</div>
+              <div>• Confirm analyst notifications still go to the correct review inbox.</div>
+            </div>
+          </div>
+        </div>
       </div>
     </main>
   );
